@@ -5,6 +5,19 @@ from safe_repo import app
 from safe_repo.core import script
 from safe_repo.core.func import subscribe
 from config import OWNER_ID
+from pyrogram.errors import (
+    UserAlreadyParticipant,
+    InviteHashInvalid,
+    InviteHashExpired,
+    InviteRequestSent,
+    FloodWait
+)
+
+except InviteRequestSent:
+    await status_msg.edit_text(
+        "📨 **Join request sent.**\n\n"
+        "Admin approval ka wait karein."
+    )
 
 # ------------------- Start-Buttons ------------------- #
 
