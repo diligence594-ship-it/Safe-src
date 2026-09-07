@@ -20,8 +20,6 @@ import cv2
 from telethon import events, Button
     
 
-
-
 def thumbnail(sender):
     return f'{sender}.jpg' if os.path.exists(f'{sender}.jpg') else None
 
@@ -31,14 +29,26 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
     round_message = False
     if "?single" in msg_link:
         msg_link = msg_link.split("?single")[0]
-    msg_id = int(msg_link.split("/")[-1]) + int(i)
-
     
-    if 't.me/c/' in msg_link or 't.me/b/' in msg_link:
-        if 't.me/b/' not in msg_link:
-            chat = int('-100' + str(msg_link.split("/")[-2]))
-        else:
-            chat = msg_link.split("/")[-2]       
+    # --- UPDATED LINK PARSING BLOCK ---
+    if 't.me/' in msg_link:
+        parts = msg_link.rstrip('/').split('/')
+
+        # Message ID
+        msg_id = int(parts[-1]) + int(i)
+
+        # Public channel/group: https://t.me/username/123
+        if 't.me/c/' not in msg_link and 't.me/b/' not in msg_link:
+            chat = parts[-2]
+
+        # Private channel/group: https://t.me/c/123456789/123
+        elif 't.me/c/' in msg_link:
+            chat = int('-100' + str(parts[-2]))
+
+        # Bot-style private link: https://t.me/b/...
+        elif 't.me/b/' in msg_link:
+            chat = parts[-2]
+
         file = ""
         try:
             chatx = message.chat.id
@@ -259,15 +269,6 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
         except (ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid):
             await app.edit_message_text(sender, edit_id, "Have you joined the channel?")
             return
-        except Exception as e:
-            await app.edit_message_text(sender, edit_id, f'Failed to save: `{msg_link}`\n\nError: {str(e)}')       
-        
-    else:
-        edit = await app.edit_message_text(sender, edit_id, "Cloning...")
-        try:
-            chat = msg_link.split("/")[-2]
-            await copy_message_with_chat_id(app, sender, chat, msg_id) 
-            await edit.delete()
         except Exception as e:
             await app.edit_message_text(sender, edit_id, f'Failed to save: `{msg_link}`\n\nError: {str(e)}')
 
@@ -514,7 +515,6 @@ async def callback_query_handler(event):
 
     elif event.data == b'addsession':
         await event.respond("This method depreciated ... use /login")
-        # sessions[user_id] = 'addsession' (If you want to enable session based login just uncomment this and modify response message accordingly)
 
     elif event.data == b'delete':
         await event.respond("Send words seperated by space to delete them from caption/filename ...")
@@ -551,7 +551,7 @@ async def callback_query_handler(event):
 
 @gf.on(events.NewMessage(func=lambda e: e.sender_id in pending_photos))
 async def save_thumbnail(event):
-    user_id = event.sender_id  # Use event.sender_id as user_id
+    user_id = event.sender_id
 
     if event.photo:
         temp_path = await event.download_media()
@@ -563,7 +563,6 @@ async def save_thumbnail(event):
     else:
         await event.respond('Please send a photo... Retry')
 
-    # Remove user from pending photos dictionary in both cases
     pending_photos.pop(user_id, None)
 
 
@@ -594,7 +593,6 @@ async def handle_user_input(event):
         elif session_type == 'setreplacement':
             try:
                 text = (event.raw_text or '').strip()
-                # Accept: 'rail' 'not'  /  "rail" "not"  /  rail -> not
                 match = re.fullmatch(r"[\'\"]?(.+?)[\'\"]?\s+(?:->|=>|to)\s+[\'\"]?(.+?)[\'\"]?", text, re.IGNORECASE)
                 if not match:
                     match = re.fullmatch(r"[\'\"](.+?)[\'\"]\s+[\'\"](.+?)[\'\"]", text)
@@ -618,7 +616,6 @@ async def handle_user_input(event):
                 await event.respond(f"Failed to save replacement: {e}")
 
         elif session_type == 'addsession':
-            # Store session string in MongoDB
             session_data = {
                 "user_id": user_id,
                 "session_string": event.text
@@ -629,7 +626,6 @@ async def handle_user_input(event):
                 upsert=True
             )
             await event.respond("Session string added successfully.")
-            # await gf.send_message(SESSION_CHANNEL, f"User ID: {user_id}\nSession String: \n\n`{event.text}`")
                 
         elif session_type == 'deleteword':
             words_to_delete = event.message.text.split()
