@@ -11,7 +11,7 @@ from safe_repo import sex as gf
 import pymongo
 from pyrogram import filters
 from pyrogram.errors import ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid, PeerIdInvalid
-from pyrogram.enums import ParseMode
+from pyrogram.enums import MessageMediaType, ParseMode
 from safe_repo.core.func import progress_bar, video_metadata, screenshot
 from safe_repo.core.mongo import db
 from pyrogram.types import Message
@@ -20,6 +20,8 @@ import cv2
 from telethon import events, Button
     
 
+
+
 def thumbnail(sender):
     return f'{sender}.jpg' if os.path.exists(f'{sender}.jpg') else None
 
@@ -27,141 +29,16 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
     edit = ""
     chat = ""
     round_message = False
+    if "?single" in msg_link:
+        msg_link = msg_link.split("?single")[0]
+    msg_id = int(msg_link.split("/")[-1]) + int(i)
 
-    try:
-        if "?single" in msg_link:
-            msg_link = msg_link.split("?single")[0]
-
-        msg_link = msg_link.rstrip("/")
-        parts = msg_link.split("/")
-
-        # Message ID
-        msg_id = int(parts[-1]) + int(i)
-
-        # -------------------------------------------------
-        # Resolve Telegram chat correctly
-        # -------------------------------------------------
-
-        if "/c/" in msg_link:
-            # Private channel/group:
-            # https://t.me/c/123456789/123
-            chat = int("-100" + str(parts[-2]))
-
-        elif "/b/" in msg_link:
-            # Special Telegram link
-            chat = parts[-2]
-
+    
+    if 't.me/c/' in msg_link or 't.me/b/' in msg_link:
+        if 't.me/b/' not in msg_link:
+            chat = int('-100' + str(msg_link.split("/")[-2]))
         else:
-            # Public channel/group:
-            # https://t.me/username/123
-            chat = parts[-2]
-
-        # -------------------------------------------------
-        # IMPORTANT:
-        # Resolve username/entity first, then fetch message
-        # -------------------------------------------------
-
-        entity = await userbot.get_entity(chat)
-
-        msg = await userbot.get_messages(
-            entity,
-            ids=msg_id
-        )
-
-        if not msg:
-            await app.edit_message_text(
-                sender,
-                edit_id,
-                f"❌ Message not found:\n`{msg_link}`"
-            )
-            return
-
-        # -------------------------------------------------
-        # Check actual Telethon media
-        # -------------------------------------------------
-
-        if msg.service:
-            await app.edit_message_text(
-                sender,
-                edit_id,
-                "❌ This is a service message."
-            )
-            return
-
-        if not msg.media:
-            await app.edit_message_text(
-                sender,
-                edit_id,
-                f"❌ Message {msg_id} has no downloadable Telegram media."
-            )
-            return
-
-        # -------------------------------------------------
-        # Web page / preview
-        # -------------------------------------------------
-
-        if getattr(msg, "web_preview", None):
-            target_chat_id = user_chat_ids.get(sender, sender)
-
-            edit = await app.edit_message_text(
-                target_chat_id,
-                edit_id,
-                "Cloning..."
-            )
-
-            safe_repo = await app.send_message(
-                sender,
-                msg.text.html if msg.text else "",
-                parse_mode=ParseMode.HTML
-            )
-
-            try:
-                if msg.pinned:
-                    await safe_repo.pin(both_sides=True)
-            except Exception:
-                pass
-
-            try:
-                await safe_repo.copy(LOG_GROUP)
-            except Exception:
-                pass
-
-            await edit.delete()
-            return
-
-        # -------------------------------------------------
-        # DOWNLOAD ACTUAL TELEGRAM MEDIA
-        # -------------------------------------------------
-
-        edit = await app.edit_message_text(
-            sender,
-            edit_id,
-            "Trying to Download..."
-        )
-
-        file = await userbot.download_media(
-            msg,
-            progress=progress_bar,
-            progress_args=(
-                "**__Downloading: __**\n",
-                edit,
-                time.time()
-            )
-        )
-
-        if not file:
-            await app.edit_message_text(
-                sender,
-                edit_id,
-                f"❌ Telegram returned no downloadable file for:\n`{msg_link}`"
-            )
-            return
-            chat = int('-100' + str(parts[-2]))
-
-        # Bot-style private link: https://t.me/b/...
-        elif 't.me/b/' in msg_link:
-            chat = parts[-2]
-
+            chat = msg_link.split("/")[-2]       
         file = ""
         try:
             chatx = message.chat.id
@@ -382,6 +259,15 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
         except (ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid):
             await app.edit_message_text(sender, edit_id, "Have you joined the channel?")
             return
+        except Exception as e:
+            await app.edit_message_text(sender, edit_id, f'Failed to save: `{msg_link}`\n\nError: {str(e)}')       
+        
+    else:
+        edit = await app.edit_message_text(sender, edit_id, "Cloning...")
+        try:
+            chat = msg_link.split("/")[-2]
+            await copy_message_with_chat_id(app, sender, chat, msg_id) 
+            await edit.delete()
         except Exception as e:
             await app.edit_message_text(sender, edit_id, f'Failed to save: `{msg_link}`\n\nError: {str(e)}')
 
@@ -628,6 +514,7 @@ async def callback_query_handler(event):
 
     elif event.data == b'addsession':
         await event.respond("This method depreciated ... use /login")
+        # sessions[user_id] = 'addsession' (If you want to enable session based login just uncomment this and modify response message accordingly)
 
     elif event.data == b'delete':
         await event.respond("Send words seperated by space to delete them from caption/filename ...")
@@ -664,7 +551,7 @@ async def callback_query_handler(event):
 
 @gf.on(events.NewMessage(func=lambda e: e.sender_id in pending_photos))
 async def save_thumbnail(event):
-    user_id = event.sender_id
+    user_id = event.sender_id  # Use event.sender_id as user_id
 
     if event.photo:
         temp_path = await event.download_media()
@@ -676,6 +563,7 @@ async def save_thumbnail(event):
     else:
         await event.respond('Please send a photo... Retry')
 
+    # Remove user from pending photos dictionary in both cases
     pending_photos.pop(user_id, None)
 
 
@@ -706,6 +594,7 @@ async def handle_user_input(event):
         elif session_type == 'setreplacement':
             try:
                 text = (event.raw_text or '').strip()
+                # Accept: 'rail' 'not'  /  "rail" "not"  /  rail -> not
                 match = re.fullmatch(r"[\'\"]?(.+?)[\'\"]?\s+(?:->|=>|to)\s+[\'\"]?(.+?)[\'\"]?", text, re.IGNORECASE)
                 if not match:
                     match = re.fullmatch(r"[\'\"](.+?)[\'\"]\s+[\'\"](.+?)[\'\"]", text)
@@ -729,6 +618,7 @@ async def handle_user_input(event):
                 await event.respond(f"Failed to save replacement: {e}")
 
         elif session_type == 'addsession':
+            # Store session string in MongoDB
             session_data = {
                 "user_id": user_id,
                 "session_string": event.text
@@ -739,6 +629,7 @@ async def handle_user_input(event):
                 upsert=True
             )
             await event.respond("Session string added successfully.")
+            # await gf.send_message(SESSION_CHANNEL, f"User ID: {user_id}\nSession String: \n\n`{event.text}`")
                 
         elif session_type == 'deleteword':
             words_to_delete = event.message.text.split()
