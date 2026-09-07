@@ -27,22 +27,135 @@ async def get_msg(userbot, sender, edit_id, msg_link, i, message):
     edit = ""
     chat = ""
     round_message = False
-    if "?single" in msg_link:
-        msg_link = msg_link.split("?single")[0]
-    
-    # --- UPDATED LINK PARSING BLOCK ---
-    if 't.me/' in msg_link:
-        parts = msg_link.rstrip('/').split('/')
+
+    try:
+        if "?single" in msg_link:
+            msg_link = msg_link.split("?single")[0]
+
+        msg_link = msg_link.rstrip("/")
+        parts = msg_link.split("/")
 
         # Message ID
         msg_id = int(parts[-1]) + int(i)
 
-        # Public channel/group: https://t.me/username/123
-        if 't.me/c/' not in msg_link and 't.me/b/' not in msg_link:
+        # -------------------------------------------------
+        # Resolve Telegram chat correctly
+        # -------------------------------------------------
+
+        if "/c/" in msg_link:
+            # Private channel/group:
+            # https://t.me/c/123456789/123
+            chat = int("-100" + str(parts[-2]))
+
+        elif "/b/" in msg_link:
+            # Special Telegram link
             chat = parts[-2]
 
-        # Private channel/group: https://t.me/c/123456789/123
-        elif 't.me/c/' in msg_link:
+        else:
+            # Public channel/group:
+            # https://t.me/username/123
+            chat = parts[-2]
+
+        # -------------------------------------------------
+        # IMPORTANT:
+        # Resolve username/entity first, then fetch message
+        # -------------------------------------------------
+
+        entity = await userbot.get_entity(chat)
+
+        msg = await userbot.get_messages(
+            entity,
+            ids=msg_id
+        )
+
+        if not msg:
+            await app.edit_message_text(
+                sender,
+                edit_id,
+                f"❌ Message not found:\n`{msg_link}`"
+            )
+            return
+
+        # -------------------------------------------------
+        # Check actual Telethon media
+        # -------------------------------------------------
+
+        if msg.service:
+            await app.edit_message_text(
+                sender,
+                edit_id,
+                "❌ This is a service message."
+            )
+            return
+
+        if not msg.media:
+            await app.edit_message_text(
+                sender,
+                edit_id,
+                f"❌ Message {msg_id} has no downloadable Telegram media."
+            )
+            return
+
+        # -------------------------------------------------
+        # Web page / preview
+        # -------------------------------------------------
+
+        if getattr(msg, "web_preview", None):
+            target_chat_id = user_chat_ids.get(sender, sender)
+
+            edit = await app.edit_message_text(
+                target_chat_id,
+                edit_id,
+                "Cloning..."
+            )
+
+            safe_repo = await app.send_message(
+                sender,
+                msg.text.html if msg.text else "",
+                parse_mode=ParseMode.HTML
+            )
+
+            try:
+                if msg.pinned:
+                    await safe_repo.pin(both_sides=True)
+            except Exception:
+                pass
+
+            try:
+                await safe_repo.copy(LOG_GROUP)
+            except Exception:
+                pass
+
+            await edit.delete()
+            return
+
+        # -------------------------------------------------
+        # DOWNLOAD ACTUAL TELEGRAM MEDIA
+        # -------------------------------------------------
+
+        edit = await app.edit_message_text(
+            sender,
+            edit_id,
+            "Trying to Download..."
+        )
+
+        file = await userbot.download_media(
+            msg,
+            progress=progress_bar,
+            progress_args=(
+                "**__Downloading: __**\n",
+                edit,
+                time.time()
+            )
+        )
+
+        if not file:
+            await app.edit_message_text(
+                sender,
+                edit_id,
+                f"❌ Telegram returned no downloadable file for:\n`{msg_link}`"
+            )
+            return
             chat = int('-100' + str(parts[-2]))
 
         # Bot-style private link: https://t.me/b/...
