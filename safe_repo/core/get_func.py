@@ -11,7 +11,7 @@ from safe_repo import sex as gf
 import pymongo
 from pyrogram import filters
 from pyrogram.errors import ChannelBanned, ChannelInvalid, ChannelPrivate, ChatIdInvalid, ChatInvalid, PeerIdInvalid
-from pyrogram.enums import MessageMediaType, ParseMode
+from pyrogram.enums import ParseMode
 from safe_repo.core.func import progress_bar, video_metadata, screenshot
 from safe_repo.core.mongo import db
 from pyrogram.types import Message
