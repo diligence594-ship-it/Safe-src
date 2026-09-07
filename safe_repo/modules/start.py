@@ -49,16 +49,16 @@ async def process_join_link(client, message):
     raw_link = message.text.strip()
     
     # Cleaning the link to extract username or invite hash
-    if "joinchat/" in raw_link or "+" in raw_link:
-        invite_arg = raw_link.split("/")[-1].replace("+", "")
+    if "t.me/+" in raw_link or "t.me/joinchat/" in raw_link:
+        invite_arg = raw_link
     elif "t.me/" in raw_link:
-        invite_arg = raw_link.split("/")[-1].replace("@", "")
+        invite_arg = "@" + raw_link.rstrip("/").split("/")[-1].lstrip("@")
     else:
-        invite_arg = raw_link.replace("@", "")
-
-    status_msg = await message.reply_text("🔄 **Joining chat...**")
-
-    try:
+        invite_arg = "@" + raw_link.lstrip("@")
+        
+        status_msg = await message.reply_text("🔄 **Joining chat...**")
+        
+        try:
         # Pass the extracted username/hash directly as a string
         chat = await client.join_chat(str(invite_arg))
         chat_title = getattr(chat, "title", "Group/Channel")
