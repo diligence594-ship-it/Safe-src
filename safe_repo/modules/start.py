@@ -40,26 +40,27 @@ async def polo_callback(_, query: CallbackQuery):
 
 # ------------------- Handle Join Request Link ------------------- #
 
-@app.on_message(filters.private & (filters.regex(r"t\.me/") | filters.regex(r"^@\w+")))
+@app.on_message(filters.private & (filters.regex(r"t\.me/") | filters.regex(r"^@?\w+")))
 async def process_join_link(client, message):
-    # Ignore commands
+    # Ignore bot commands
     if message.text.startswith("/"):
         return
 
     raw_link = message.text.strip()
     
-    # Extract invite hash or username
+    # Cleaning the link to extract username or invite hash
     if "joinchat/" in raw_link or "+" in raw_link:
         invite_arg = raw_link.split("/")[-1].replace("+", "")
     elif "t.me/" in raw_link:
-        invite_arg = raw_link.split("/")[-1]
+        invite_arg = raw_link.split("/")[-1].replace("@", "")
     else:
-        invite_arg = raw_link
+        invite_arg = raw_link.replace("@", "")
 
     status_msg = await message.reply_text("🔄 **Joining chat...**")
 
     try:
-        chat = await client.join_chat(invite_arg)
+        # Pass the extracted username/hash directly as a string
+        chat = await client.join_chat(str(invite_arg))
         chat_title = getattr(chat, "title", "Group/Channel")
         chat_id = getattr(chat, "id", "N/A")
         
@@ -72,7 +73,7 @@ async def process_join_link(client, message):
     except UserAlreadyParticipant:
         await status_msg.edit_text("⚠️ **Already a member of this chat.**")
     except (InviteHashInvalid, InviteHashExpired):
-        await status_msg.edit_text("❌ **Invalid or Expired Invite Link.**")
+        await status_msg.edit_text("❌ **Invalid or Expired Invite Link/Username.**")
     except FloodWait as e:
         await status_msg.edit_text(f"⏳ **Telegram Rate Limit:** Wait `{e.value}` seconds.")
     except Exception as e:
